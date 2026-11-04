@@ -150,29 +150,26 @@ pipeline {
 
         stage('Verify Live Traffic') {
             steps {
-                sh '''
-                    set -e
+                script {
+                    def expectedText = params.ACTION == 'DEPLOY_GREEN' ? 'GREEN ENVIRONMENT' : 'BLUE ENVIRONMENT'
+                    def expectedColor = params.ACTION == 'DEPLOY_GREEN' ? 'green' : 'blue'
 
-                    if [ "$ACTION" = "DEPLOY_GREEN" ]; then
-                        EXPECTED="GREEN ENVIRONMENT"
-                        EXPECTED_COLOR="green"
-                    else
-                        EXPECTED="BLUE ENVIRONMENT"
-                        EXPECTED_COLOR="blue"
-                    fi
+                    withEnv(["EXPECTED_TEXT=${expectedText}", "EXPECTED_COLOR=${expectedColor}"]) {
+                        sh """
+                            set -eu
 
-                    HTML=$(ssh -i "$SSH_KEY" "$VLE8_USER@$VLE8_HOST" \
-                        "sudo k3s kubectl exec deployment/myapp-blue -- wget -qO- http://myapp-service/")
+                            HTML=\$(ssh -i "\$SSH_KEY" "\$VLE8_USER@\$VLE8_HOST" "sudo k3s kubectl exec deployment/myapp-blue -- wget -qO- http://myapp-service/")
 
-                    echo "$HTML" | grep -q "$EXPECTED"
+                            printf '%s' "\$HTML" | grep -Fq "\$EXPECTED_TEXT"
 
-                    COLOR=$(ssh -i "$SSH_KEY" "$VLE8_USER@$VLE8_HOST" \
-                        "sudo k3s kubectl get service myapp-service -o jsonpath='{.spec.selector.color}'")
+                            COLOR=\$(ssh -i "\$SSH_KEY" "\$VLE8_USER@\$VLE8_HOST" "sudo k3s kubectl get service myapp-service -o jsonpath='{.spec.selector.color}'")
 
-                    test "$COLOR" = "$EXPECTED_COLOR"
+                            test "\$COLOR" = "\$EXPECTED_COLOR"
 
-                    echo "Live traffic verified: $EXPECTED"
-                '''
+                            echo "Live traffic verified: \$EXPECTED_TEXT"
+                        """
+                    }
+                }
             }
         }
     }
